@@ -9,10 +9,7 @@ import os
 import random
 from time import time
 from sys import exit
-repl_name = os.environ["REPL_OWNER"]
-if repl_name == "five-nine":
-  print("Log into Replit to play this game!")
-  exit()
+repl_name = input("What is ur name?\n")
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 #pygame.init()
@@ -61,14 +58,11 @@ starfruit_img = pygame.image.load("fruit images/star-fruit.png")
 gmo_img = pygame.image.load("gmo.png")
 clock = pygame.time.Clock()
 FPS = 40
-fruit_collection = []
+fruit_collection = [] 
+showed_fruit_sequence = ["Frequent", "Common", "Uncommon", "Rare", "Epic", "Legendary"]
 showed_fruit = "Frequent"
 showed_fruit_color = (255, 255, 255)
-paused = False
-home_screen = True
-shop = False
-playing = False
-dictionary_status = False
+status = "home"
 mouse_clicked = False
 mouse_up = True
 mouse_down = False
@@ -83,22 +77,34 @@ unlock_legendary_lvl = 250
 ballx = 508
 ball_direction = "right"
 #player's stats
+STARTING_MONEY = 0
+STARTING_SPEED = 0.0
+STARTING_SIZE = 64.0
+STARTING_LEVEL_TIME = 30.0
+STARTING_LEVEL = 1
+MAX_SPEED = 10.0
+MAX_SIZE = 192.0
+MAX_LEVEL_TIME = 10.0
+MAX_UPGRADES = 10
+SPEED_STEP = (MAX_SPEED-STARTING_SPEED)/MAX_UPGRADES #will be 1
+SIZE_STEP = (MAX_SIZE-STARTING_SIZE)/MAX_UPGRADES #will be 12.8
+LEVEL_TIME_STEP = (MAX_LEVEL_TIME-STARTING_LEVEL_TIME)/MAX_UPGRADES #will be -2
+PRICE_INCREMENT = 10000
 try:
   file = open(repl_name, "r")
 except FileNotFoundError:
   with open(repl_name, "w") as file:
-    file.write("0\n0\n0.5\n64.0\n30\n1")
+    file.write(str(STARTING_MONEY)+"\n"+str(STARTING_SPEED)+"\n"+str(STARTING_SIZE)+"\n"+str(STARTING_LEVEL_TIME)+"\n" + str(STARTING_LEVEL))
 finally:
   with open(repl_name, "r") as file:
     file_contents = file.read().split("\n")
-highscore = int(file_contents[0])
-money = int(file_contents[1])
-player_speed = float(file_contents[2])
-size = float(file_contents[3])
+money = int(file_contents[0])
+player_speed = float(file_contents[1])
+size = float(file_contents[2])
 farmer = pygame.transform.scale(farmer_img, (round(size), round(size)))
-level_time = int(file_contents[4])
-level = int(file_contents[5])
-file_num = 6
+level_time = float(file_contents[3])
+level = int(file_contents[4])
+file_num = 5
 while file_num < len(file_contents):
   fruit_collection.append(str(file_contents[file_num]))
   file_num += 1
@@ -107,11 +113,7 @@ del(file_contents)
 points = 0
 playerX = (SCREEN_WIDTH/2) - (size/2)
 playerY = SCREEN_HEIGHT - size
-font = "Comic Sans MS"
 black = (0, 0, 0)
-storage1 = None
-storage2 = None
-storage3 = None
 size_price = 0
 player_speed_price = 0
 level_time_price = 0
@@ -150,16 +152,25 @@ GMO = False
 GMO_stats = ["GMO", 0, 4, range(32, 57, 8), gmo_img]
 dict_list = [apple_stats, lemon_stats, grape_stats, orange_stats, banana_stats]
 sprite_stagger = 150
-def text(size, font, message, color, textx, texty, align = "left"):
+pygame.font.init()
+def text(size, message, color, textx, texty, alignx = "center", aligny = "center", font = "Comic Sans MS"):
+  size = int(size*0.6)
   myfont = pygame.font.SysFont(font, size)
   text_width, text_height = myfont.size(message)
   text_surface = myfont.render(message, True, color)
-  if align == "left":
-    screen.blit(text_surface, (textx, texty))
-  if align == "center":
-    screen.blit(text_surface, (textx - (text_width/2), texty))
-  if align == "right":
-    screen.blit(text_surface, (textx - text_width, texty))
+  if alignx == "left":
+    pass
+  elif alignx == "center":
+    textx -= (text_width/2)
+  elif alignx == "right":
+    textx -= text_width
+  if aligny == "top":
+    pass
+  elif aligny == "center":
+    texty -= (text_height/2)
+  elif aligny == "bottom":
+    texty -= text_height
+  screen.blit(text_surface, (textx, texty))
 def button(x, y, width, height, radius = 0, cost = 0):
   global available_btn_color
   global unavailable_btn_color
@@ -178,14 +189,11 @@ def button(x, y, width, height, radius = 0, cost = 0):
     pygame.draw.rect(screen, unavailable_btn_color, (x, y, width, height), 0, radius)
   return False
 def back_arrow_function():
-  global shop, home_screen, dictionary_status, playing
+  global status
   if button(0, 0, 48, 48, 15):
-    home_screen = True
-    shop = False
-    dictionary_status = False
-    playing = False
+    status = "home"
   screen.blit(back_arrow, (0, 0))
-  text(24, font, "\'b\' for back", black, 0, 48)
+  text(24, "\'b\' for back", black, 0, 48, alignx = "top", aligny = "left")
 class Fruit:
   all_fruit_on_screen_points_added_up = 0
   fruit_list = []
@@ -202,7 +210,7 @@ class Fruit:
     self.fall_speed = fruit_stats[2]
     self.size = fruit_stats[3]
     self.image = fruit_stats[4]
-    self.offset = random.randrange(-self.fall_speed * 2, self.fall_speed * 2 + 1)
+    self.offset = random.randint(-self.fall_speed * 2, self.fall_speed * 2)
     self.offset /= 2
     self.index_number = len(Fruit.fruit_list) - 1
     if GMO:
@@ -241,17 +249,17 @@ class Fruit:
   def display(self, x, y, color):
     global black
     if self.name in fruit_collection:
-      screen.blit(self.image, (x - ((self.size - 32)/2), (y - ((self.size - 32)/2))))
-      text(75, font, str(self.name), color, x + 100, y)
-      text(75, font, "$" + str(self.points), (255, 255, 0), x + 425, y)
-      text(75, font, str(int(self.size/4)), (255, 0, 0), x + 600, y)
-      text(75, font, str(int(self.fall_speed*2)), (0, 255, 0), x + 700, y)
+      screen.blit(self.image, (x - ((self.size)/2) + 15, (y - ((self.size)/2))))
+      text(75, str(self.name), color, x + 100, y, alignx = "left")
+      text(75, "$" + str(self.points), (255, 255, 0), x + 425, y)
+      text(75, str(int(self.size/4)), (255, 0, 0), x + 600, y)
+      text(75, str(int(self.fall_speed*2)), (0, 255, 0), x + 700, y)
     else:
-      text(50, font, "???", black, x - 16, y)
-      text(50, font, "???", color, x + 100, y)
-      text(50, font, "???", (255, 255, 0), x + 425, y)
-      text(50, font, "???", (255, 0, 0), x + 600, y)
-      text(50, font, "???", (0, 255, 0), x + 700, y)
+      text(50, "???", black, x - 16, y)
+      text(50, "???", color, x + 100, y, alignx = "left")
+      text(50, "???", (255, 255, 0), x + 425, y)
+      text(50, "???", (255, 0, 0), x + 600, y)
+      text(50, "???", (0, 255, 0), x + 700, y)
 class Powerup:
   powerup_list = []
   def __init__(self, power_stats):
@@ -281,196 +289,43 @@ class Powerup:
       Powerup.powerup_list.pop(self.index_number)
 class Timer:
   _list = []
-  def __init__(self, seconds, running = False):
-    self.start_time = time()
-    self.end_time = time()
-    self.time = seconds
+  def __init__(self, ticks, running = False):
+    self.limit = ticks # a constant
+    self.ticks = ticks
     self.running = running
   def update(self):
     if self.running:
-      self.end_time = time()
-      if self.end_time - self.start_time >= self.time:
+      self.ticks -= 1
+      if self.ticks == 0:
         return True
     return False
-  def start(self, seconds):
-    self.time = seconds
+  def start(self):
     self.running = True
-    self.start_time = time()
-    self.end_time = time()
+    self.ticks = self.limit
   def stop(self):
     self.running = False
-level_timer = Timer(level_time, running = False)
-os.system("clear")
-print("Use recommended link:\nhttps://replit.com/@bchian316/Fruit-Farmer?lite=1&outputonly=1#main.py")
+level_timer = Timer(level_time*FPS)
+os.system("cls")
 while game_is_running:
-  while game_is_running and home_screen:
+  while game_is_running and status == "home":
     screen.blit(background, (0, 0))
     mouse_position = pygame.mouse.get_pos()
     mouse_position = list(mouse_position)
-    if not(dictionary_status):
-      text(175, font, "Fruit Farmer", black, 400, 0, align = "center")
-      screen.blit(big_farmer, (200, 125))
-      screen.blit(money_icon, (0, 100))
-      text(75, font, "= $" + str(money), (255, 255, 0), 75, 105)
-      text(50, font, "Highscore: " + str(highscore), (100, 255, 60), 800, 100, align = "right")
-      text(20, "freesanbold.ttf ", "Press \'x\' to save and quit", (255, 0, 0), 800, 0, align = "right")
-      for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-          game_is_running = False
-        if event.type == pygame.KEYDOWN:
-          if event.key == pygame.K_s:
-            home_screen = False
-            shop = True
-          if event.key == pygame.K_RETURN:
-            home_screen = False
-            playing = True
-          if event.key == pygame.K_d:
-            dictionary_status = True
-          if event.key == pygame.K_x:
-            game_is_running = False
-        if event.type == pygame.MOUSEBUTTONDOWN:
-          mouse_down = True
-          if mouse_up == True:
-            mouse_clicked = True
-            mouse_up = False
-        if event.type == pygame.MOUSEBUTTONUP:
-          mouse_up = True
-          mouse_down = False
-      if button(25, 200, 200, 200, 50):
-        home_screen = False
-        shop = True
-      if button(575, 200, 200, 200, 50):
-        dictionary_status = True
-      if button(150, 500, 500, 100, 50):
-        home_screen = False
-        playing = True
-      text(75, font, "SHOP", (255, 255, 0), 125, 275, align = "center")
-      text(30, font, "Click or press 's'", (0, 0, 0), 125, 325, align = "center")
-      text(55, font, "Dictionary", (0, 0, 0), 675, 275, align = "center")
-      text(30, font, "Click or press 'd'", (0, 0, 0), 675, 325, align = "center")
-      text(100, font, "PLAY", (10, 100, 32), 400, 510, align = "center")
-      text(30, font, "Click or press 'ENTER'", (0, 0, 0), 400, 575, align = "center")
-    else:
-      if showed_fruit == "Frequent":
-        showed_fruit_color = (255, 255, 255)
-      elif showed_fruit == "Common":
-        showed_fruit_color = (51, 255, 255)
-      elif showed_fruit == "Uncommon":
-        showed_fruit_color = (255, 167, 51)
-      elif showed_fruit == "Rare":
-        showed_fruit_color = (51, 255, 58)
-      elif showed_fruit == "Epic":
-        showed_fruit_color = (132, 13, 184)
-      else:
-        showed_fruit_color = (223, 24, 245)
-      text(100, font, "Dictionary", black, 225, 0)
-      text(60, font, showed_fruit, black, 400, 60, align = "center")
-      text(35, font, "Fruit", black, 40, 75, align = "center")
-      text(35, font, "Name", black, 125, 75)
-      text(35, font, "Money", black, 450, 75)
-      text(35, font, "Size", black, 625, 75)
-      text(35, font, "Speed", black, 725, 75)
-      text(20, "freesanbold.ttf ", "Press \'x\' to save and quit", (255, 0, 0), 800, 0, align = "right")
-      if(showed_fruit == "Frequent"):
-        dict_list = [Fruit(apple_stats), Fruit(lemon_stats), Fruit(grape_stats), Fruit(orange_stats), Fruit(banana_stats)]
-      if(showed_fruit == "Common"):
-        dict_list = [Fruit(raspberry_stats), Fruit(melon_stats), Fruit(grapefruit_stats), Fruit(pear_stats), Fruit(peach_stats)]
-      if(showed_fruit == "Uncommon"):
-        dict_list = [Fruit(apricot_stats), Fruit(plum_stats), Fruit(blueberry_stats), Fruit(coconut_stats), Fruit(strawberry_stats)]
-      if(showed_fruit == "Rare"):
-        dict_list = [Fruit(blackberry_stats), Fruit(cherry_stats), Fruit(kiwi_stats), Fruit(guava_stats), Fruit(pineapple_stats)]
-      if(showed_fruit == "Epic"):
-        dict_list = [Fruit(lychee_stats), Fruit(watermelon_stats), Fruit(mango_stats), Fruit(nectarine_stats), Fruit(persimmon_stats)]
-      if(showed_fruit == "Legendary"):
-        dict_list = [Fruit(dragonfruit_stats), Fruit(kumquat_stats), Fruit(passionfruit_stats), Fruit(pomegranate_stats), Fruit(starfruit_stats)]
-      if showed_fruit != "Frequent":
-        screen.blit(left_arrow, (0, 576))
-        text(24, font, "Previous", black, 32, 580)
-      if showed_fruit != "Legendary":
-        screen.blit(right_arrow,(776, 576))
-        text(24, font, "Next", black, 732, 580)
-      for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-          game_is_running = False
-        if event.type == pygame.KEYDOWN:
-          if event.key == pygame.K_x:
-            game_is_running = False
-          if event.key == pygame.K_LEFT or event.key == pygame.K_a:
-            if showed_fruit == "Common":
-              showed_fruit = "Frequent"
-            if showed_fruit == "Uncommon":
-              showed_fruit = "Common"
-            if showed_fruit == "Rare":
-              showed_fruit = "Uncommon"
-            if showed_fruit == "Epic":
-              showed_fruit = "Rare"
-            if showed_fruit == "Legendary":
-              showed_fruit = "Epic"
-          if event.key == pygame.K_RIGHT or event.key == pygame.K_d:
-            if showed_fruit == "Epic":
-              showed_fruit = "Legendary"
-            if showed_fruit == "Rare":
-              showed_fruit = "Epic"
-            if showed_fruit == "Uncommon":
-              showed_fruit = "Rare"
-            if showed_fruit == "Common":
-              showed_fruit = "Uncommon"
-            if showed_fruit == "Frequent":
-              showed_fruit = "Common"
-          if event.key == pygame.K_b:
-            dictionary_status = False
-          if event.key == pygame.K_x:
-            game_is_running = False
-        if event.type == pygame.MOUSEBUTTONDOWN:
-          mouse_down = True
-          if mouse_up == True:
-            mouse_clicked = True
-            mouse_up = False
-        if event.type == pygame.MOUSEBUTTONUP:
-          mouse_up = True
-          mouse_down = False
-      back_arrow_function()
-      for _ in enumerate(dict_list):
-        _ = list(_)
-        _[1].display(25, _[0] * 100 + 100, showed_fruit_color)
-    clock.tick(FPS)
-    if mouse_clicked:
-      mouse_clicked = False
-    pygame.display.update()
-  while game_is_running and shop:
-    screen.blit(background, (0, 0))
-    text(100, font, "Shop", black, 325, 0)
+    text(175, "Fruit Farmer", black, 400, -25, aligny = "top")
+    screen.blit(big_farmer, (200, 125))
     screen.blit(money_icon, (0, 100))
-    text(75, font, "= $" + str(money), (255, 255, 0), 75, 105)
-    text(20, "freesanbold.ttf ", "Press \'x\' to save and quit", (255, 0, 0), 800, 0, align = "right")
-    mouse_position = pygame.mouse.get_pos()
-    mouse_position = list(mouse_position)
-    screen.blit(farmer, (184 - ((size - 32)/2), (400 - ((size - 32)/2))))
-    pygame.draw.circle(screen, (0, 0, 0), (ballx, 400), 16)
-    text(60, font, "Your size", black, 200, 300, align = "center")
-    text(60, font, "Your speed", black, 600, 300, align = "center")
-    text(60, font, "Your level time", black, 400, 225, align = "center")
-    if level_time == 30:
-      level_time = 29
-      storage3 = 30
-    level_time_price = round((30 - level_time) * 50000)
-    if storage3 != None:
-      level_time = 30
-    if size == 64:
-      size = 70.4
-      storage2 = 64
-    player_speed_price = round(player_speed * 100000)
-    if player_speed == 0.5:
-      player_speed = 0
-      storage1 = 0.5
-    size_price = round(100000 * ((size - 64)/12.8))
+    text(75, "= $" + str(money), (255, 255, 0), 75, 125, alignx = "left")
+    text(20, "Press \'x\' to save and quit", (255, 0, 0), 800, 0, alignx = "right", aligny = "top")
     for event in pygame.event.get():
       if event.type == pygame.QUIT:
         game_is_running = False
       if event.type == pygame.KEYDOWN:
-        if event.key == pygame.K_b:
-          shop = False
-          home_screen = True
+        if event.key == pygame.K_s:
+          status = "shop"
+        if event.key == pygame.K_RETURN:
+          status = "playing"
+        if event.key == pygame.K_d:
+          status = "dictionary"
         if event.key == pygame.K_x:
           game_is_running = False
       if event.type == pygame.MOUSEBUTTONDOWN:
@@ -481,65 +336,163 @@ while game_is_running:
       if event.type == pygame.MOUSEBUTTONUP:
         mouse_up = True
         mouse_down = False
-    if storage1 != None:
-      player_speed = 0.5
-    if storage2 != None:
-      size = 64
-    storage2 = None
+    if button(25, 200, 200, 200, 50):
+      status = "shop"
+    if button(575, 200, 200, 200, 50):
+      status = "dictionary"
+    if button(150, 500, 500, 100, 50):
+      status = "playing"
+    text(75, "SHOP", (255, 255, 0), 125, 275)
+    text(30, "Click or press 's'", (0, 0, 0), 125, 325)
+    text(55, "Dictionary", (0, 0, 0), 675, 275)
+    text(30, "Click or press 'd'", (0, 0, 0), 675, 325)
+    text(100, "PLAY", (10, 100, 32), 400, 525)
+    text(30, "Click or press 'ENTER'", (0, 0, 0), 400, 575)
+    clock.tick(FPS)
+    if mouse_clicked:
+      mouse_clicked = False
+    pygame.display.update()
+  while game_is_running and status == "dictionary":
+    screen.blit(background, (0, 0))
+    mouse_position = pygame.mouse.get_pos()
+    mouse_position = list(mouse_position)
+    if showed_fruit == "Frequent":
+      showed_fruit_color = (255, 255, 255)
+      dict_list = [Fruit(apple_stats), Fruit(lemon_stats), Fruit(grape_stats), Fruit(orange_stats), Fruit(banana_stats)]
+    elif showed_fruit == "Common":
+      showed_fruit_color = (51, 255, 255)
+      dict_list = [Fruit(raspberry_stats), Fruit(melon_stats), Fruit(grapefruit_stats), Fruit(pear_stats), Fruit(peach_stats)]
+    elif showed_fruit == "Uncommon":
+      showed_fruit_color = (255, 167, 51)
+      dict_list = [Fruit(apricot_stats), Fruit(plum_stats), Fruit(blueberry_stats), Fruit(coconut_stats), Fruit(strawberry_stats)]
+    elif showed_fruit == "Rare":
+      showed_fruit_color = (51, 255, 58)
+      dict_list = [Fruit(blackberry_stats), Fruit(cherry_stats), Fruit(kiwi_stats), Fruit(guava_stats), Fruit(pineapple_stats)]
+    elif showed_fruit == "Epic":
+      showed_fruit_color = (132, 13, 184)
+      dict_list = [Fruit(lychee_stats), Fruit(watermelon_stats), Fruit(mango_stats), Fruit(nectarine_stats), Fruit(persimmon_stats)]
+    elif showed_fruit == "Legendary":
+      showed_fruit_color = (223, 24, 245)
+      dict_list = [Fruit(dragonfruit_stats), Fruit(kumquat_stats), Fruit(passionfruit_stats), Fruit(pomegranate_stats), Fruit(starfruit_stats)]
+    text(100, "Dictionary", black, 400, 0, aligny = "top")
+    text(50, showed_fruit, showed_fruit_color, 400, 75)
+    text(35, "Fruit", black, 40, 100)
+    text(35, "Name", black, 150, 100)
+    text(35, "Money", black, 450, 100)
+    text(35, "Size", black, 625, 100)
+    text(35, "Speed", black, 725, 100)
+    text(20, "Press \'x\' to save and quit", (255, 0, 0), 800, 0, alignx = "right", aligny = "top")
+    if showed_fruit != "Frequent":
+      screen.blit(left_arrow, (0, 576))
+      text(24, "Previous", black, 32, 576, alignx = "left", aligny = "center")
+    if showed_fruit != "Legendary":
+      screen.blit(right_arrow,(776, 576))
+      text(24, "Next", black, 732, 576, alignx = "right", aligny = "center")
+    for event in pygame.event.get():
+      if event.type == pygame.QUIT:
+        game_is_running = False
+      if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_x:
+          game_is_running = False
+        if event.key == pygame.K_LEFT or event.key == pygame.K_a:
+          if showed_fruit != "Frequent":
+            showed_fruit = showed_fruit_sequence[showed_fruit_sequence.index(showed_fruit)-1]
+        if event.key == pygame.K_RIGHT or event.key == pygame.K_d:
+          if showed_fruit != "Legendary":
+            showed_fruit = showed_fruit_sequence[showed_fruit_sequence.index(showed_fruit)+1]
+        if event.key == pygame.K_b:
+          status = "home"
+        if event.key == pygame.K_x:
+          game_is_running = False
+      if event.type == pygame.MOUSEBUTTONDOWN:
+        mouse_down = True
+        if mouse_up == True:
+          mouse_clicked = True
+          mouse_up = False
+      if event.type == pygame.MOUSEBUTTONUP:
+        mouse_up = True
+        mouse_down = False
+    back_arrow_function()
+    for _ in enumerate(dict_list):
+      _ = list(_)
+      _[1].display(25, _[0] * 100 + 150, showed_fruit_color)
+    clock.tick(FPS)
+    if mouse_clicked:
+      mouse_clicked = False
+    pygame.display.update()
+  while game_is_running and status == "shop":
+    screen.blit(background, (0, 0))
+    text(100, "Shop", black, 400, 0, aligny = "top")
+    screen.blit(money_icon, (0, 100))
+    text(75, "= $" + str(money), (255, 255, 0), 75, 125, alignx = "left")
+    text(20, "Press \'x\' to save and quit", (255, 0, 0), 800, 0, alignx = "right", aligny = "top")
+    mouse_position = pygame.mouse.get_pos()
+    mouse_position = list(mouse_position)
+    screen.blit(farmer, (184 - ((size - 32)/2), (400 - ((size - 32)/2))))
+    pygame.draw.circle(screen, (0, 0, 0), (ballx, 425), 16)
+    text(60, "Your size", black, 200, 350)
+    text(60, "Your speed", black, 600, 350)
+    text(60, "Your level time", black, 400, 275)
+    level_time_price = round((STARTING_LEVEL_TIME - level_time)/2 * PRICE_INCREMENT)
+    player_speed_price = round(player_speed * PRICE_INCREMENT)
+    size_price = round(PRICE_INCREMENT * ((size - STARTING_SIZE)/12.8))
+    for event in pygame.event.get():
+      if event.type == pygame.QUIT:
+        game_is_running = False
+      if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_b:
+          status = "home"
+        if event.key == pygame.K_x:
+          game_is_running = False
+      if event.type == pygame.MOUSEBUTTONDOWN:
+        mouse_down = True
+        if mouse_up == True:
+          mouse_clicked = True
+          mouse_up = False
+      if event.type == pygame.MOUSEBUTTONUP:
+        mouse_up = True
+        mouse_down = False
     #for size
     if button(100, 500, 200, 50, 50, size_price):
-      if size < 192:
+      if size < MAX_SIZE:
         if money >= size_price:
-          size += 12.8
-          size = round(size, 1)
-          playerY = 600 - size
+          size += SIZE_STEP
           money -= size_price
           farmer = pygame.transform.scale(farmer_img, (round(size), round(size)))
-    if size == 192:
-      pygame.draw.rect(screen, (0, 255, 0), (100, 500, 200, 50), 0, 50)
     if button(500, 500, 200, 50, 50, player_speed_price):
-      if player_speed < 10:
+      if player_speed < MAX_SPEED:
         if money >= player_speed_price:
-          if storage1 != None:
-            player_speed += 0.5
-            player_speed = int(player_speed)
-            money -= player_speed_price
-          else:
-            money -= player_speed_price
-            player_speed += 1
-    if player_speed == 10.0:
-      pygame.draw.rect(screen, (0, 255, 0), (500, 500, 200, 50), 0, 50)
+          money -= player_speed_price
+          player_speed += SPEED_STEP
     if button(300, 400, 200, 50, 50, level_time_price):
-      if level_time > 10:
+      if level_time > MAX_LEVEL_TIME:
         if money >= level_time_price:
-          level_time -= 2
+          level_time += LEVEL_TIME_STEP
           money -= level_time_price
-    if level_time == 10:
-      pygame.draw.rect(screen, (0, 255, 0), (300, 400, 200, 50), 0, 50)
-    storage1 = None
     back_arrow_function()
-    text(35, font, "Size", black, 200, 500, align = "center")
-    if size < 192:
-      text(25, font, "Level " + str(round(size_price/100000)), black, 100, 525)
-      text(25, font, "$" + str(size_price), (255, 255, 0), 225, 525)
+    text(35, "Size", black, 200, 500, aligny = "bottom")
+    if size < MAX_SIZE:
+      text(25, "Level " + str(round(size_price/PRICE_INCREMENT)), black, 110, 525, alignx = "left", aligny = "center")
+      text(25, "$" + str(size_price), (255, 255, 0), 275, 525, alignx = "right")
     else:
-      text(25, font, "Max Level", (255, 255, 0), 160, 525)
+      pygame.draw.rect(screen, (0, 155, 0), (100, 500, 200, 50), 0, 50)
+      text(35, "Max Level", (255, 255, 0), 200, 525)
     #for speed
-    text(35, font, "Speed", black, 600, 500, align = "center")
-    if player_speed < 10:
-      text(25, font, "Level " + str(round(player_speed)), black, 500, 525)
-      if storage1 != None:
-        player_speed = 0.5
-      text(25, font, "$" + str(player_speed_price), (255, 255, 0), 625, 525)
+    text(35, "Speed", black, 600, 500, aligny = "bottom")
+    if player_speed < MAX_SPEED:
+      text(25, "Level " + str(round(player_speed_price/PRICE_INCREMENT)), black, 510, 525, alignx = "left", aligny = "center")
+      text(25, "$" + str(player_speed_price), (255, 255, 0), 675, 525, alignx = "right")
     else:
-      text(25, font, "Max Level", (255, 255, 0), 550, 525)
+      pygame.draw.rect(screen, (0, 155, 0), (500, 500, 200, 50), 0, 50)
+      text(35, "Max Level", (255, 255, 0), 600, 525)
     #for level time
-    text(35, font, "Level Time", black, 400, 400, align = "center")
-    if level_time > 10:
-      text(25, font, "Level " + str(round(level_time_price/100000)), black, 300, 425)
-      text(25, font, "$" + str(level_time_price), (255, 255, 0), 425, 425)
+    text(35, "Level Time", black, 400, 400, aligny = "bottom")
+    if level_time > MAX_LEVEL_TIME:
+      text(25, "Level " + str(round(level_time_price/PRICE_INCREMENT)), black, 310, 425, alignx = "left", aligny = "center")
+      text(25, "$" + str(level_time_price), (255, 255, 0), 475, 425, alignx = "right")
     else:
-      text(25, font, "Max Level", (255, 255, 0), 350, 425)
+      pygame.draw.rect(screen, (0, 155, 0), (300, 400, 200, 50), 0, 50)
+      text(35, "Max Level", (255, 255, 0), 400, 425)
     if ball_direction == "left":
       ballx -= player_speed
     if ball_direction == "right":
@@ -548,11 +501,8 @@ while game_is_running:
       ball_direction = "right"
     if ballx >= 692:
       ball_direction = "left"
-    if storage3 != None:
-      level_time_price = 0
-    text(75, font, str(30 - (level_time_price / 50000)), (255, 255, 255), 350, 275)
-    storage3 = None
-    text(75, font, " seconds", (255, 255, 255), 300, 325)
+    text(65, str(round(level_time)), (255, 255, 255), 400, 325)
+    text(60, " seconds", (255, 255, 255), 400, 350)
     clock.tick(FPS)
     if mouse_clicked:
       mouse_clicked = False
@@ -565,18 +515,20 @@ while game_is_running:
     Fruit.all_fruit_on_screen_points_added_up += 250
     first_fruit_dropped = True
     #Powerup.powerup_list.append(Powerup(GMO_stats))
-  playerX = 400 - (size/2)
-  level_timer.start(level_time)
-  while game_is_running and playing:
+  playerX = SCREEN_WIDTH/2 - (size/2)
+  playerY = SCREEN_HEIGHT - size
+  level_timer.limit = level_time*FPS
+  level_timer.start()
+  while game_is_running and status == "playing":
     pressed_keys = pygame.key.get_pressed()
     screen.blit(background, (0, 0))
     mouse_position = pygame.mouse.get_pos()
     mouse_position = list(mouse_position)
-    text(100, font, str(points), (255, 255, 0), 0, 50)
-    text(20, "freesanbold.ttf ", "Press \'x\' to save and quit", (255, 0, 0), 800, 0, align = "right")
-    text(50, font, "Level " + str(level), (255, 255, 0), 0, 550)
-    if points > highscore:
-      text(40, font, "Achieved New Highscore!", (0, 255, 0), 400, 0, align = "center")
+    text(100, str(points), (255, 255, 0), 0, 50, alignx = "left", aligny = "top")
+    text(20, "Press \'x\' to save and quit", (255, 0, 0), 800, 0, alignx = "right", aligny = "top")
+    text(50, "Level " + str(level), (255, 255, 0), 100, 550)
+    pygame.draw.rect(screen, (125, 125, 125), (0, 575, 200, 25))
+    pygame.draw.rect(screen, (0, 255, 0), (0, 575, 200*(1-level_timer.ticks/level_timer.limit), 25))
     for event in pygame.event.get():
       if event.type == pygame.QUIT:
         game_is_running = False
@@ -599,8 +551,7 @@ while game_is_running:
     if pressed_keys[pygame.K_RIGHT] or pressed_keys[pygame.K_d]:
       playerX += player_speed
     if pressed_keys[pygame.K_b]:
-      playing = False
-      home_screen = True
+      status = "home"
       break
     if playerX < 0 - size:
       playerX = 800 + size
@@ -609,7 +560,7 @@ while game_is_running:
     screen.blit(farmer, (playerX, playerY))
     if level_timer.update():
       level += 1
-      level_timer.start(level_time)
+      level_timer.start()
     for fruit in Fruit.fruit_list:
       Fruit.all_fruit_on_screen_points_added_up += fruit.points
     while Fruit.all_fruit_on_screen_points_added_up < level * 100:
@@ -643,13 +594,10 @@ while game_is_running:
   Powerup.powerup_list = []
   GMO = False
   money += points
-  if points > highscore:
-    highscore = points
   points = 0
   Fruit.all_fruit_on_screen_points_added_up = 0
-  continue
 file = open(repl_name, "w")
-file.write(str(highscore) + "\n" + str(money) + "\n" + str(player_speed) + "\n" + str(size) + "\n" + str(level_time) + "\n" + str(level))
+file.write(str(money) + "\n" + str(player_speed) + "\n" + str(size) + "\n" + str(level_time) + "\n" + str(level))
 for _ in fruit_collection:
   file.write("\n" + str(_))
 file.close()
